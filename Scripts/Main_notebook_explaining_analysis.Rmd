@@ -1,0 +1,307 @@
+---
+title: "*C. elegans* gene analysis"
+author: "Amhed Missael Vargas Velazquez"
+output: html_notebook
+runtime: shiny
+---
+# What makes a gene a *C. elegans* gene? 
+
+## Software requirements
+* wget
+* git
+* awk
+* perl
+* python >= 3.7
+* zcat
+* bedtools
+* R
+* (ExtRamp) [https://github.com/ridgelab/ExtRamp]
+* (RNAfold) [https://www.tbi.univie.ac.at/RNA/RNAfold.1.html]
+
+## R libraries
+* ggplot2
+
+## Perl libraries
+
+
+The following code was used to analize propierties of *C. elegans* genes.
+
+## Download and produce all data files
+Obtain source data
+```{bash, results='hide'}
+#Make directory to store data
+mkdir data
+cd data
+
+#Get sequences and annotation files of C. elegans WS280
+wget -q ftp://ftp.wormbase.org/pub/wormbase/species/c_elegans/PRJNA13758/sequence/genomic/c_elegans.PRJNA13758.WS280.genomic_softmasked.fa.gz
+wget -q ftp://ftp.wormbase.org/pub/wormbase/species/c_elegans/PRJNA13758/sequence/transcripts/c_elegans.PRJNA13758.WS280.CDS_transcripts.fa.gz
+wget -q ftp://ftp.wormbase.org/pub/wormbase/species/c_elegans/PRJNA13758/gff/c_elegans.PRJNA13758.WS280.annotations.gff3.gz
+
+#Get RegAtlas data
+wget -q https://github.com/js2264/RegAtlas/raw/master/dashboard.Ahringer/releases/dashboard.Ahringer_v0.5.3/data/minimal-data.RData
+
+```
+
+### Download processed *C. elegans* data
+```{bash}
+cd data
+
+#Copy repository with data already processed
+git clone https://github.com/AmhedVargas/Celegans_data.git
+
+```
+
+### Get *C.elegans* largest gene bodies (used in most of analysis)
+Use awk to extract information from WormBase annotations
+```{bash}
+cd data
+
+#Format gff into bed on transcripts gene bodies (start to stop)
+zcat c_elegans.PRJNA13758.WS280.annotations.gff3.gz | awk -F"\t" '{if($2=="WormBase"){if($3=="CDS"){print $0}}}' - | awk -F"\t|;|=" '{print $1"\t"$4"\t"$5"\t"$12"\t.\t"$7}' | perl -pe 's/Transcript://g' | awk -F"\t" '{OFS="\t"; split($4,trans,","); for(i=1;i<=length(trans);i++){print $1,$2,$3,trans[i],$5,$6}}' | awk -F"\t" '{if(array[$4] != 0){if(start[$4] > $2){start[$4]=$2};if(end[$4] < $3){end[$4]=$3};array[$4]=$1"\t"start[$4]"\t"end[$4]"\t"$4"\t"$5"\t"$6}else{start[$4]=$2;end[$4]=$3;array[$4]=$0}}END{for(key in array){print array[key]}}' - | sort > Cel_GeneBodies.bed
+
+#Obtain actual name of transcript
+zcat c_elegans.PRJNA13758.WS280.annotations.gff3.gz | grep -v "#" | grep "WormBase" | awk -F"\t" '{if ($3=="mRNA"){print $9}}'| awk -F";" '{split($1,ts,":"); split($2,gs,":"); split($5,loc,"="); print ts[2]"\t"gs[2]";"ts[2]";"loc[2]}' | awk -F"\t" '{OFS="\t"; print $1,$2,$2,$1}' > Cel_mRNAID.txt
+
+#Combine both files to replace gene name column by Wormbase-transcript ID
+awk -F"\t" '{OFS="\t"; if(array[$4]==0){array[$4]=$2}else{print $1,($2-1),$3,array[$4],$5,$6}}' Cel_mRNAID.txt Cel_GeneBodies.bed > Cel_Genes.bed
+
+#Filter per wormbase ID
+awk -F"\t" '{OFS="\t"; split($4,info,";"); wbid=info[1]; if(data[wbid] ==""){data[wbid]=$0; siz[wbid]=($3-$2);}else{if(($3-$2) > siz[wbid]){data[wbid]=$0; siz[wbid]=($3-$2);}}} END{for(key in data){print data[key]}}' Cel_Genes.bed | sort -k1,1 -k2,2n > Cel_largest_Genebodies.bed
+
+```
+
+### Get top 500 genes expressed from Ahringer dataset
+Process RNA data and produce .tsv for highest expressed genes per tissue
+```{r, echo=FALSE}
+#Go to data
+setwd("./data")
+#Load RegAtlas data
+load("minimal-data.RData")
+#Use table lcap.dt (also accesible web via the name tissue-specific.RNA-seq.dataset.txt)
+#write.table(lcap.dt, "tissue-specific.RNA-seq.dataset.txt", quote = F, row = F, col = T, sep = '\t')
+data=lcap.dt
+data[,"Soma"]=apply(data[,c("Neurons", "Muscle", "Hypod.", "Intest.")],1, function(x){sum(x)})
+data[,"Ubiq."]=apply(data[,c("Germline", "Neurons", "Muscle", "Hypod.", "Intest.")],1, function(x){sum(x)})
+
+for (tissue in c("Germline", "Neurons", "Muscle", "Hypod.", "Intest.","Soma","Ubiq.")){
+  temp=data[data$which.tissues == tissue,]
+  write.table(temp[head(rev(order(temp[,tissue])),500),c("WormBaseID","geneID","which.tissues",tissue)],paste("Top500_",tissue,"_lcap-dt.tsv",sep=""),sep="\t",col.names=F,row.names=F, quote=F)
+  }
+```
+
+### Make .list files
+Note: procedure not really needed but simplifies further analysis
+```{bash}
+cd data
+#For each tissue tsv print WB IDs
+for file in `ls *.tsv`; do
+awk -F"\t" '{print $1}' $file > ${file%_lcap-dt.tsv}.list;
+done
+```
+
+
+### Codon usage
+Produce data for codon usage analysis
+```{bash}
+cd data
+mkdir Codon_data
+
+#Put data in tab format
+zcat c_elegans.PRJNA13758.WS280.CDS_transcripts.fa.gz | awk 'BEGIN{fla=0} {if(/>/){if(fla==1){print ""}; split($0,pone,">"); split(pone[2],pto," gene="); printf pto[2]";"pto[1]"\t"; fla=1}else{printf $0}} END{print ""}' > Codon_data/WS280_CDS.tsv
+
+#Get CDSs of largest bodies
+awk -F"\t" '{if(NF ==2){split($1,fix,";"); data[fix[1]";."fix[2]]=$2}else{split($4,info,";"); split(info[2],pto,"."); trans=""; for(i =1; i<length(pto); i=i+1){trans=trans"."pto[i]}; print info[1]"\t"data[info[1]";"trans]}}' Codon_data/WS280_CDS.tsv Cel_largest_Genebodies.bed > Codon_data/Cel_largest_CDS.tsv
+
+#Produce fasta file for further analysis (e.g. ramp)
+awk -F"\t" '{print ">"$1"\n"$2}' Codon_data/Cel_largest_CDS.tsv > Codon_data/Cel_largest_CDS.fasta
+
+#Produce subset for Top500 genes (inessesary and inneficient but makes simple following analysis)
+for file in `ls *.list`; do awk -F"\t" '{if(NF == 2){data[$1]=$2}else{if(data[$1] != ""){print ">"$1"\n"data[$1]}}}' Codon_data/Cel_largest_CDS.tsv ${file} > Codon_data/${file%.list}.fasta; done
+
+```
+
+### Intron distribution
+Pre-process data before plotting; data will consist of only largest isoforms in genes.
+```{bash}
+cd data
+mkdir Intron_data
+cd Intron_data
+
+#Format gff to extract introns per transcript ID 
+zcat ../c_elegans.PRJNA13758.WS280.annotations.gff3.gz | awk -F"\t" '{OFS="\t"; if($2=="WormBase"){if($3=="intron"){print $1,$4,$5,$9,".",$7}}}' | awk -F"\t" '{array[$1"-"$2"-"$3"-"$6]=$0} END{for(key in array){print array[key]}}' | sort -k1,1 -k2,2n | awk -F"\t" '{OFS="\t"; split($4,info,";"); split(info[1],data,":"); print $1,$2,$3,data[2],$5,$6}' > Cel_Introns.bed
+
+#Format gff to obtain the first CDS of each transcrpt
+zcat ../c_elegans.PRJNA13758.WS280.annotations.gff3.gz | awk -F"\t" '{if($2=="WormBase"){if($3=="CDS"){print $0}}}' - | awk -F"\t|;|=" '{print $1"\t"$4"\t"$5"\t"$12"\t.\t"$7}' | perl -pe 's/Transcript://g' | awk -F"\t" '{OFS="\t"; split($4,trans,","); for(i=1;i<=length(trans);i++){print $1,$2,$3,trans[i],$5,$6}}' | awk -F"\t" '{if(array[$4] != 0){if(strand[$4] == "-"){if(start[$4]<$2){start[$4]=$2;end[$4]=$3;array[$4]=$0;}}else{if(start[$4]>$2){start[$4]=$2;end[$4]=$3;array[$4]=$0;}}}else{start[$4]=$2;end[$4]=$3;array[$4]=$0; strand[$4]=$6}}END{for(key in array){print array[key]}}' - | sort -k1,1 -k2,2n  > Cel_firstCDS.bed
+
+#Add WB ID
+awk -F"\t" '{OFS="\t"; if(array[$4]==0){array[$4]=$2}else{print $1,($2-1),$3,array[$4],$5,$6}}' ../Cel_mRNAID.txt Cel_firstCDS.bed > Cel_1stCDS.bed
+
+cd ..
+#Per each list of tissue specific genes get their first CDS
+for file in `ls Top*.list`; do awk -F"\t" '{OFS="\t"; split($4,info,";"); print info[1],$0}' Cel_largest_Genebodies.bed | awk -F"\t" '{if(data[$1]==""){data[$1]=$0}else{print data[$1]}}' - ${file} | awk -F"\t" '{if(NF == 7){print data[$5]}else{data[$4]=$0}}' Intron_data/Cel_1stCDS.bed - > Intron_data/${file%.list}_1stCDS.bed; done
+
+```
+
+### Ramp analysis
+Get ExtRamp and run analysis in CDS produced in codon analysis.
+```{bash, results='hide'}
+#Make directory to harbour external software
+mkdir software
+cd software
+
+#Get ExtRamp program
+wget -q https://github.com/ridgelab/ExtRamp/archive/master.zip
+unzip master.zip
+rm master.zip
+
+#Go to data directory
+cd ../data
+mkdir Ramp_data
+cd Codon_data
+
+#Analize seqs with ExtRamp and produce tables for further analysis
+for file in `ls *.fasta`; do python3.7 ../../software/ExtRamp-master/ExtRamp.py -i ${file} -a ../Celegans_data/data/Celegans_tAi.csv -o../Ramp_data/${file%.fasta}.ramp -p ../Ramp_data/${file%.fasta}.speeds -l ../Ramp_data/${file%.fasta}.vals -n ../Ramp_data/${file%.fasta}.noramp -w 13;  awk '{if(/>/){printf $0"\t"}else{print $0}}' ../Ramp_data/${file%.fasta}.ramp | cat - ../Ramp_data/${file%.fasta}.noramp | perl -pe 's/>//g' |awk -F"\t" '{print $1"\t"length($2)}' > ../Ramp_data/${file%.fasta}.ramplength; perl -pe 's/>//g' ../Ramp_data/${file%.fasta}.speeds > tmp; mv tmp ../Ramp_data/${file%.fasta}.speeds; perl -pe 's/>//g' ../Ramp_data/${file%.fasta}.vals > tmp; mv tmp ../Ramp_data/${file%.fasta}.vals; done
+
+```
+
+### Free energy
+Append four trailing a's to all CDSs and compute free energy.
+```{bash}
+cd data
+mkdir RBS_data
+cd Codon_data
+
+#For each CDS data add trailing adenines and calculate the free energy of the first 12 aa (until base 39)
+for file in `ls *.fasta`; do cat ${file}  | awk '{if(/>/){print $0}else{print "AAAA"substr($0,1,39)}}' |RNAfold --noPS | perl -pe 's/\s\(/sepatoto/g'| awk '{if(/>/){printf $0"\t"}else{if((NR % 3) == 0){split($0,val,"sepatoto"); print val[2]}}}' | perl -pe 's/[>)]//g'  > ../RBS_data/${file%.fasta}.RBS-39.txt ; done
+
+```
+
+### piRNAscan data
+Download data
+```{bash}
+cd data
+mkdir piRNA_data
+cd piRNA_data
+
+#Get data from piRNA stringent search
+wget -q http://cosbi6.ee.ncku.edu.tw/rdchen1124_static/WGT/file/search_gene_result_elegans_stringent.csv
+
+#Process with awk
+awk -F"," '{OFS=","; if(/\"\"/){flag=0}; if(ones == 1){dat=$0; ones =0}; if(flag==1){print dat"\n"$0}; if(/Gene WormBase ID/){ones=1}; if(/Transcript/){flag=1};}' search_gene_result_elegans_stringent.csv > tempA.txt
+
+#Reformat again to process with R
+awk -F"," '{if ((NR % 2) == 1){name=$0}else{print $0}}' tempA.txt > tempB.txt
+```
+
+Format data with R
+```{r}
+setwd("data/piRNA_data")
+
+tt=read.csv("tempB.txt",header=F)
+cc=read.table("../Cel_GeneBodies.bed",sep="\t",header=F)
+
+
+rownames(tt)=as.character(tt[,1])
+rownames(cc)=as.character(cc[,4])
+
+pp=cbind(tt,(cc[rownames(tt),3]-cc[rownames(tt),2]))
+colnames(pp)=c("TranscriptID","No.-Predidcted-piRNA-target-sites","No.-CLASH-Identified-piRNA-target-sites","No.-Common-piRNA-target-sites","GeneBodySize")
+
+head(pp)
+write.table(pp,"piRNA-scan_all_transcripts-data.tsv",sep="\t",quote=F,col.names=T,row.names=F)
+```
+
+Remove temporal files and get extra files for transgene analysis
+```{bash}
+cd data/piRNA_data
+
+#Remove temporal files
+rm tempA.txt tempB.txt
+
+#Process data in transgene builder format
+wget -q http://cosbi6.ee.ncku.edu.tw/rdchen1124_static/WGT/file/piRNA_data_c_elegans.csv
+
+#Split per coma and get piRNA names
+tail -n +2 piRNA_data_c_elegans.csv | awk -F"," '{print $1}' > HengNames.txt
+```
+
+
+### Germline Optimization data
+Copy CLI-GLO modified version from external data 
+```{bash}
+cd data
+mkdir GLO_data
+cd GLO_data
+
+#Obtain sequences scores from Dan server
+wget -q http://104.131.81.59/data/sequence_lib_scores.db
+
+#Obtain modified scripts
+cp ../Celegans_data/modified_software/GLO_CLI.pl .
+cp ../Celegans_data/modified_software/Score_GLO.pl .
+
+#Copy from Codon directory
+cp ../Codon_data/*.fasta .
+
+#For each CDS data Score its GLO score
+for file in `ls *.fasta`; do perl Score_GLO.pl ${file} > ${file%.fasta}.GLO_score.tsv ; done
+
+```
+
+### Meta-analyss of Expression data
+```{bash}
+cd data
+mkdir Expression_data
+cd Expression_data
+
+###WormBase SPELL Expression cluster
+wget -q ftp://caltech.wormbase.org/pub/wormbase/spell_download/tables/GeneExprCluster.csv
+
+###Wormbase SPELL Tissue-Gene
+wget -q ftp://caltech.wormbase.org/pub/wormbase/spell_download/tables/TissueGene.csv
+
+##Kaletsky 
+
+#Germline
+wget -q https://worm.princeton.edu/media/download/germ_line.txt
+
+#Muscle
+wget -q https://worm.princeton.edu/media/download/muscle_cell.txt
+
+#Neuron
+wget -q https://worm.princeton.edu/media/download/neuron.txt
+
+#Intestine
+wget -q https://worm.princeton.edu/media/download/intestine.txt
+
+#Hypodermis
+wget -q https://worm.princeton.edu/media/download/hypodermis.txt
+
+##From his paper
+cp ../Celegans_data/data/Kaletsky*tsv .
+
+##Wormbase annotations
+#Germ line
+grep "germ line" TissueGene.csv | awk -F"\t" '{print $3}' | perl -pe 's/,/\n/g' | perl -pe 's/\(/\t/g' | perl -pe 's/\)//g' | sort -k1,1 | uniq > Germline_WB.tsv
+
+#Muscle
+grep "muscle cell" TissueGene.csv | awk -F"\t" '{print $3}' | perl -pe 's/,/\n/g' | perl -pe 's/\(/\t/g' | perl -pe 's/\)//g' | sort -k1,1 | uniq > Muscle_WB.tsv
+
+#Neuron
+grep "neuron" TissueGene.csv | awk -F"\t" '{print $3}' | perl -pe 's/,/\n/g' | perl -pe 's/\(/\t/g' | perl -pe 's/\)//g' | sort -k1,1 | uniq > Neuron_WB.tsv
+
+#Intestine
+grep "intestine" TissueGene.csv | awk -F"\t" '{print $3}' | perl -pe 's/,/\n/g' | perl -pe 's/\(/\t/g' | perl -pe 's/\)//g' | sort -k1,1 | uniq > Intestine_WB.tsv
+
+#Hypodermis
+grep "hypodermis" TissueGene.csv | awk -F"\t" '{print $3}' | perl -pe 's/,/\n/g' | perl -pe 's/\(/\t/g' | perl -pe 's/\)//g' | sort -k1,1 | uniq > Hypodermis_WB.tsv
+
+#data[,"Soma"]=apply(data[,c("Neurons", "Muscle", "Hypod.", "Intest.")],1, function(x){sum(x)})
+data[,"Ubiq."]=apply(data[,c("Germline", "Neurons", "Muscle", "Hypod.", "Intest.")],1, function(x){sum(x)})
+
+```
+
+
+
+
