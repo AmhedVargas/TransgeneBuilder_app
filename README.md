@@ -19,25 +19,15 @@ Final figures after analysis. Please note that very few ended up on the final pa
 
 ### Data download
 We downloaded data for our analysis from different resources, for example:
-* Wormbase
-* Ahringer's Lab Reg Atlas
+* [Wormbase](https://wormbase.org/)
+* [Ahringer's Lab Reg Atlas](https://ahringerlab.com/RegAtlas/)
 * [piRTABASE](http://cosbi6.ee.ncku.edu.tw/piRTarBase/)
 
-The shell scripts aid
-We have deposited DNA and RNA libraries under the [GEO](https://www.ncbi.nlm.nih.gov/geo/) accesion number [GSE165210](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE165210)
+The shell scripts aid snd specify how and which data we downloaded from these sites.
 
-## Additional information
-We have build a [shiny web app](https://wormbuilder.dev/piRNAi/) to ease the construction of piRNAi fragments. 
-It's code can be found in this repository: https://github.com/AmhedVargas/piRNAi_dev
-
-Originally, the data was processed using BLAST search as a proxy to identify thew number of mis-matches between a piRNAi guide and any other part of the genome. How the data was processed can be found here: https://github.com/AmhedVargas/piRNAi-DB
-
-However, in the latest version of the piRNAi app we opted to use an exhaustive algorithm based on the calculation of the Hamming distance. Our c++ implementation can be found here: https://github.com/AmhedVargas/CelegansHammingAlignments
 
 ## Contact us
 Please feel free to send any question or comment to [me](mailto:avargas0lcg@gmail.com) or [Christian](mailto:cfjensen@kaust.edu.sa)
-
-
 
 # TransgeneBuilder_app
 Source code, analysis workflow, and data analyzed for Vargas-Velazquez et al. manuscript
