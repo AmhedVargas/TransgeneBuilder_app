@@ -18,7 +18,7 @@ Shell, R, and Markdown documents.
 
 2. Figures
 
-Final figures after analysis. Please note that very few ended up on the final paper
+Final figures, graphs, and images after analysis. Please note that very few ended up on the final paper
 
 ### Data download
 We downloaded data for our analysis from different resources, for example:
