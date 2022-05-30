@@ -13,21 +13,24 @@ This github repository contains the code used to acquire the data and perform an
 ### Folder structure
 This repository is structured into two main folders:
 1. Scripts
+
 Shell, R, and Markdown documents.
+
 2. Figures
+
 Final figures after analysis. Please note that very few ended up on the final paper
 
 ### Data download
 We downloaded data for our analysis from different resources, for example:
 * [Wormbase](https://wormbase.org/)
 * [Ahringer's Lab Reg Atlas](https://ahringerlab.com/RegAtlas/)
-* [piRTABASE](http://cosbi6.ee.ncku.edu.tw/piRTarBase/)
+* [piRTarBase](http://cosbi6.ee.ncku.edu.tw/piRTarBase/)
 
 The shell scripts aid snd specify how and which data we downloaded from these sites.
 
 
 ## Contact us
-Please feel free to send any question or comment to [me](mailto:avargas0lcg@gmail.com) or [Christian](mailto:cfjensen@kaust.edu.sa)
+Please feel free to send any question or comment to [me](mailto:avargas0lcg@gmail.com) or [Christian Froekjaer-Jensen](mailto:cfjensen@kaust.edu.sa)
 
 # TransgeneBuilder_app
 Source code, analysis workflow, and data analyzed for Vargas-Velazquez et al. manuscript
