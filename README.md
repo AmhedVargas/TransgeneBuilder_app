@@ -26,7 +26,7 @@ We downloaded data for our analysis from different resources, for example:
 * [Ahringer's Lab Reg Atlas](https://ahringerlab.com/RegAtlas/)
 * [piRTarBase](http://cosbi6.ee.ncku.edu.tw/piRTarBase/)
 
-The shell scripts aid snd specify how and which data we downloaded from these sites. PLease note as well that in order to use any code related to the GLO algorithm, a database containing frequencies for each 12-mer sequence is needed. You can find a copy of this file, calculated by Dan Dickinson, [here](https://s3.eu-central-1.amazonaws.com/wormbuilder.dev/Downloads/sequence_lib_scores.db).
+The shell scripts aid and specify how and which data we downloaded from these sites. Please note as well that in order to use any code related to the GLO algorithm, a database containing frequencies for each 12-mer sequence is needed. You can find a copy of this file, calculated by Dan Dickinson, [here](https://s3.eu-central-1.amazonaws.com/wormbuilder.dev/Downloads/sequence_lib_scores.db).
 
 
 ## Contact us
