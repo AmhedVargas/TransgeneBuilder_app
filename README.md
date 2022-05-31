@@ -31,6 +31,3 @@ The shell scripts aid snd specify how and which data we downloaded from these si
 
 ## Contact us
 Please feel free to send any question or comment to [me](mailto:avargas0lcg@gmail.com) or [Christian Froekjaer-Jensen](mailto:cfjensen@kaust.edu.sa)
-
-# TransgeneBuilder_app
-Source code, analysis workflow, and data analyzed for Vargas-Velazquez et al. manuscript
